@@ -130,6 +130,7 @@ func (cache *LinearCache) respond(value chan Response, staleResources []string) 
 			}
 		}
 	}
+	cache.log.Infof("cache responding %d", len(value))
 	value <- &RawResponse{
 		Request:   &Request{TypeUrl: cache.typeURL},
 		Resources: resources,
@@ -147,9 +148,11 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 		delete(cache.watches, name)
 	}
 	for value, stale := range notifyList {
+		cache.log.Infof("notifyAll notifyList %s %v", cache.typeURL, stale)
 		cache.respond(value, stale)
 	}
 	for value := range cache.watchAll {
+		cache.log.Infof("notifyAll watchAll %s", cache.typeURL)
 		cache.respond(value, nil)
 	}
 	cache.watchAll = make(watches)
@@ -160,11 +163,13 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 	}
 
 	for id, watch := range cache.deltaWatches {
+		cache.log.Infof("notifyAll delta %s", cache.typeURL)
 		res := cache.respondDelta(watch.Request, watch.Response, watch.StreamState)
 		if res != nil {
 			delete(cache.deltaWatches, id)
 		}
 	}
+	cache.log.Infof("notifyAll done")
 }
 
 func (cache *LinearCache) respondDelta(request *DeltaRequest, value chan DeltaResponse, state stream.StreamState) *RawDeltaResponse {
@@ -325,6 +330,7 @@ func (cache *LinearCache) CreateWatch(request *Request, streamState stream.Strea
 		cache.mu.Lock()
 		defer cache.mu.Unlock()
 		for _, name := range request.ResourceNames {
+			cache.log.Infof("clean watch each %s", name)
 			set, exists := cache.watches[name]
 			if exists {
 				delete(set, value)

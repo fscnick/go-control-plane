@@ -18,6 +18,7 @@ package sotw
 import (
 	"context"
 	"errors"
+	"log"
 	"strconv"
 	"sync/atomic"
 
@@ -183,6 +184,9 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 
 	// sends a response by serializing to protobuf Any
 	send := func(resp cache.Response) (string, error) {
+		defer func() {
+			log.Printf("sotw response sent\n")
+		}()
 		if resp == nil {
 			return "", errors.New("missing response")
 		}
@@ -229,6 +233,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "endpoints watch failed")
 			}
+			log.Printf("sotw handling cache response endpoints\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -239,6 +244,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "clusters watch failed")
 			}
+			log.Printf("sotw handling cache response clusters\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -249,6 +255,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "routes watch failed")
 			}
+			log.Printf("sotw handling cache response routes\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -259,6 +266,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "scopedRoutes watch failed")
 			}
+			log.Printf("sotw handling cache response sroutes\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -269,6 +277,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "listeners watch failed")
 			}
+			log.Printf("sotw handling cache response listeners\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -279,6 +288,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "secrets watch failed")
 			}
+			log.Printf("sotw handling cache response secrets\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -289,6 +299,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "runtimes watch failed")
 			}
+			log.Printf("sotw handling cache response runtimes\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -299,6 +310,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if !more {
 				return status.Errorf(codes.Unavailable, "extensionConfigs watch failed")
 			}
+			log.Printf("sotw handling cache response extensionConfigs\n")
 			nonce, err := send(resp)
 			if err != nil {
 				return err
@@ -311,6 +323,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 					return status.Errorf(codes.Unavailable, "resource watch failed")
 				}
 				typeURL := resp.GetRequest().TypeUrl
+				log.Printf("sotw handling cache response %s\n", typeURL)
 				nonce, err := send(resp)
 				if err != nil {
 					return err
@@ -326,6 +339,8 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			if req == nil {
 				return status.Errorf(codes.Unavailable, "empty request")
 			}
+
+			log.Printf("sotw handling xds request %s %d\n", req.TypeUrl, len(req.ResourceNames))
 
 			// node field in discovery request is delta-compressed
 			if req.Node != nil {
@@ -364,9 +379,11 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 			case req.TypeUrl == resource.EndpointType:
 				if values.endpointNonce == "" || values.endpointNonce == nonce {
 					if values.endpointCancel != nil {
+						log.Printf("sotw endpointCanceling\n")
 						values.endpointCancel()
 					}
 					values.endpoints = make(chan cache.Response, 1)
+					log.Printf("sotw CreateWatching\n")
 					values.endpointCancel = s.cache.CreateWatch(req, streamState, values.endpoints)
 				}
 			case req.TypeUrl == resource.ClusterType:
@@ -435,6 +452,7 @@ func (s *server) process(stream Stream, reqCh <-chan *discovery.DiscoveryRequest
 					values.cancellations[typeURL] = s.cache.CreateWatch(req, streamState, values.responses)
 				}
 			}
+			log.Printf("sotw handled xds request %s %d\n", req.TypeUrl, len(req.ResourceNames))
 		}
 	}
 }
