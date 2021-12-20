@@ -144,7 +144,6 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 		for watch := range cache.watches[name] {
 			notifyList[watch] = append(notifyList[watch], name)
 		}
-		delete(cache.watches, name)
 	}
 	for value, stale := range notifyList {
 		cache.respond(value, stale)
@@ -152,7 +151,6 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 	for value := range cache.watchAll {
 		cache.respond(value, nil)
 	}
-	cache.watchAll = make(watches)
 
 	err := cache.updateVersionMap(modified)
 	if err != nil {
