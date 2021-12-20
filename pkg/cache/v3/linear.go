@@ -146,9 +146,11 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 		}
 	}
 	for value, stale := range notifyList {
+		cache.log.Infof("notifyAll notifyList %s %v", cache.typeURL, stale)
 		cache.respond(value, stale)
 	}
 	for value := range cache.watchAll {
+		cache.log.Infof("notifyAll watchAll %s", cache.typeURL)
 		cache.respond(value, nil)
 	}
 
@@ -158,11 +160,13 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 	}
 
 	for id, watch := range cache.deltaWatches {
+		cache.log.Infof("notifyAll delta %s", cache.typeURL)
 		res := cache.respondDelta(watch.Request, watch.Response, watch.StreamState)
 		if res != nil {
 			delete(cache.deltaWatches, id)
 		}
 	}
+	cache.log.Infof("notifyAll done")
 }
 
 func (cache *LinearCache) respondDelta(request *DeltaRequest, value chan DeltaResponse, state stream.StreamState) *RawDeltaResponse {
