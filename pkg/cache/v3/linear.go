@@ -114,12 +114,17 @@ func NewLinearCache(typeURL string, opts ...LinearCacheOption) *LinearCache {
 }
 
 func (cache *LinearCache) respond(value chan Response, staleResources []string) {
-	var resources []types.ResourceWithTTL
+	var (
+		resources            []types.ResourceWithTTL
+		respondResourceNames []string
+	)
+
 	// TODO: optimize the resources slice creations across different clients
 	if len(staleResources) == 0 {
 		resources = make([]types.ResourceWithTTL, 0, len(cache.resources))
-		for _, resource := range cache.resources {
+		for name, resource := range cache.resources {
 			resources = append(resources, types.ResourceWithTTL{Resource: resource})
+			respondResourceNames = append(respondResourceNames, name)
 		}
 	} else {
 		resources = make([]types.ResourceWithTTL, 0, len(staleResources))
@@ -127,11 +132,12 @@ func (cache *LinearCache) respond(value chan Response, staleResources []string) 
 			resource := cache.resources[name]
 			if resource != nil {
 				resources = append(resources, types.ResourceWithTTL{Resource: resource})
+				respondResourceNames = append(respondResourceNames, name)
 			}
 		}
 	}
 	value <- &RawResponse{
-		Request:   &Request{TypeUrl: cache.typeURL},
+		Request:   &Request{TypeUrl: cache.typeURL, ResourceNames: respondResourceNames},
 		Resources: resources,
 		Version:   cache.getVersion(),
 	}
@@ -293,8 +299,11 @@ func (cache *LinearCache) CreateWatch(request *Request, streamState stream.Strea
 		stale = lastVersion != cache.version
 	} else {
 		for _, name := range request.ResourceNames {
+			_, has := streamState.GetKnownResourceNames(request.TypeUrl)[name]
+			version, exists := cache.versionVector[name]
+
 			// When a resource is removed, its version defaults 0 and it is not considered stale.
-			if lastVersion < cache.versionVector[name] {
+			if lastVersion < version || (!has && exists) {
 				stale = true
 				staleResources = append(staleResources, name)
 			}
