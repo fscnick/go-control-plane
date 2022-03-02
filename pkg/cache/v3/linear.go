@@ -143,29 +143,27 @@ func (cache *LinearCache) respond(value chan Response, staleResources []string) 
 	}
 }
 
-func (cache *LinearCache) notifyAll(modified map[string]struct{}, fromDeletion bool) {
+func (cache *LinearCache) notifyAll(modified map[string]struct{}) {
 	// de-duplicate watches that need to be responded
 	notifyList := make(map[chan Response][]string)
-	if !fromDeletion {
-		for name := range modified {
-			for watch := range cache.watches[name] {
+	for name := range modified {
+		for watch, streamState := range cache.watches[name] {
+			resourceNames := streamState.GetKnownResourceNames(cache.typeURL)
+			modifiedNameInResourceName := false
+			for resourceName := range resourceNames {
+				if !modifiedNameInResourceName && resourceName == name {
+					modifiedNameInResourceName = true
+				}
+				// To avoid the stale in notifyList becomes empty slice.
+				// Don't skip resource name that has been deleted here.
+				// It would be filtered out in respond because the corresponding resource has been deleted.
+				notifyList[watch] = append(notifyList[watch], resourceName)
+			}
+			if !modifiedNameInResourceName {
 				notifyList[watch] = append(notifyList[watch], name)
 			}
-			delete(cache.watches, name)
 		}
-	} else {
-		for deletedName := range modified {
-			for watch, streamState := range cache.watches[deletedName] {
-				resourceNames := streamState.GetKnownResourceNames(cache.typeURL)
-				for resourceName := range resourceNames {
-					// To avoid the stale in notifyList becomes empty slice.
-					// Don't skip resource name that has been deleted here.
-					// It would be filtered out in respond because the corresponding resource has been deleted.
-					notifyList[watch] = append(notifyList[watch], resourceName)
-				}
-			}
-			delete(cache.watches, deletedName)
-		}
+		delete(cache.watches, name)
 	}
 
 	for value, stale := range notifyList {
@@ -186,31 +184,6 @@ func (cache *LinearCache) notifyAll(modified map[string]struct{}, fromDeletion b
 		if res != nil {
 			delete(cache.deltaWatches, id)
 		}
-	}
-}
-
-func (cache *LinearCache) notifyAllFromDeletion(modified map[string]struct{}) {
-	notifyList := make(map[chan Response][]string)
-	for deletedName := range modified {
-		for watch, streamState := range cache.watches[deletedName] {
-			names := streamState.GetKnownResourceNames(cache.typeURL)
-			for name := range names {
-				if name == deletedName {
-					// skip the resource name has been deleted.
-					continue
-				}
-				notifyList[watch] = append(notifyList[watch], name)
-			}
-		}
-		delete(cache.watches, deletedName)
-	}
-
-	for value, stale := range notifyList {
-		cache.respond(value, stale)
-	}
-
-	for value := range cache.watchAll {
-		cache.respond(value, nil)
 	}
 }
 
@@ -246,7 +219,7 @@ func (cache *LinearCache) UpdateResource(name string, res types.Resource) error 
 	cache.resources[name] = res
 
 	// TODO: batch watch closures to prevent rapid updates
-	cache.notifyAll(map[string]struct{}{name: {}}, false)
+	cache.notifyAll(map[string]struct{}{name: {}})
 
 	return nil
 }
@@ -261,7 +234,7 @@ func (cache *LinearCache) DeleteResource(name string) error {
 	delete(cache.resources, name)
 
 	// TODO: batch watch closures to prevent rapid updates
-	cache.notifyAll(map[string]struct{}{name: {}}, true)
+	cache.notifyAll(map[string]struct{}{name: {}})
 	return nil
 }
 
@@ -293,7 +266,7 @@ func (cache *LinearCache) SetResources(resources map[string]types.Resource) {
 		modified[name] = struct{}{}
 	}
 
-	cache.notifyAll(modified, false)
+	cache.notifyAll(modified)
 }
 
 // GetResources returns current resources stored in the cache
@@ -346,7 +319,10 @@ func (cache *LinearCache) CreateWatch(request *Request, streamState stream.Strea
 			// When a resource is removed, its version defaults 0 and it is not considered stale.
 			if lastVersion < version || (!has && exists) {
 				stale = true
-				staleResources = append(staleResources, name)
+
+				// Here we collect all requested names.
+				// It would be filtered out in respond if the resource name doesn't appear in cache.
+				staleResources = request.ResourceNames
 			}
 		}
 	}
