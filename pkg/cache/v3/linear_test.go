@@ -336,7 +336,7 @@ func TestLinearWatchTwo(t *testing.T) {
 	mustBlock(t, w1)
 	require.NoError(t, c.UpdateResource("a", testResource("aa")))
 	// should only get the modified resource
-	verifyResponse(t, w, "1", 1)
+	verifyResponse(t, w, "1", 2)
 	verifyResponse(t, w1, "1", 2)
 }
 
